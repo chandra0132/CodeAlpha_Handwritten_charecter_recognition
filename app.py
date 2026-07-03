@@ -2,8 +2,24 @@ import os
 import base64
 import numpy as np
 import cv2
-import tensorflow as tf
 from flask import Flask, request, jsonify, render_template
+
+# Dynamically load TFLite or TensorFlow based on what's available
+try:
+    import tflite_runtime.interpreter as tflite
+    TFLITE_AVAILABLE = True
+except ImportError:
+    try:
+        import tensorflow.lite as tflite
+        TFLITE_AVAILABLE = True
+    except ImportError:
+        TFLITE_AVAILABLE = False
+
+try:
+    import tensorflow as tf
+    KERAS_AVAILABLE = True
+except ImportError:
+    KERAS_AVAILABLE = False
 
 # Ensure modules in src are importable
 import sys
@@ -20,15 +36,33 @@ MODEL_DIR = "models"
 
 def get_model(dataset_name):
     """
-    Lazy-load and cache model from models directory.
+    Lazy-load and cache model from models directory (TFLite first, Keras as fallback).
     """
     dataset_name = dataset_name.lower()
     if dataset_name not in MODELS_CACHE:
-        model_path = os.path.join(MODEL_DIR, f"{dataset_name}_model.keras")
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file {model_path} not found. Please train the model first.")
-        print(f"Loading {dataset_name.upper()} model into memory cache...")
-        MODELS_CACHE[dataset_name] = tf.keras.models.load_model(model_path)
+        tflite_path = os.path.join(MODEL_DIR, f"{dataset_name}_model.tflite")
+        keras_path = os.path.join(MODEL_DIR, f"{dataset_name}_model.keras")
+        
+        if TFLITE_AVAILABLE and os.path.exists(tflite_path):
+            print(f"Loading TFLite {dataset_name.upper()} model into memory cache...")
+            interpreter = tflite.Interpreter(model_path=tflite_path)
+            interpreter.allocate_tensors()
+            MODELS_CACHE[dataset_name] = {
+                'type': 'tflite',
+                'interpreter': interpreter,
+                'input_details': interpreter.get_input_details(),
+                'output_details': interpreter.get_output_details()
+            }
+        elif KERAS_AVAILABLE and os.path.exists(keras_path):
+            print(f"Loading Keras {dataset_name.upper()} model into memory cache...")
+            MODELS_CACHE[dataset_name] = {
+                'type': 'keras',
+                'model': tf.keras.models.load_model(keras_path)
+            }
+        else:
+            raise FileNotFoundError(
+                f"No suitable model found for {dataset_name.upper()} (TFLite or Keras files not found/unsupported)."
+            )
     return MODELS_CACHE[dataset_name]
 
 def parse_base64_image(base64_str):
@@ -48,10 +82,10 @@ def home():
     """
     Main page showing the interactive dashboard.
     """
-    # Check if models are available, so we can notify the user in the UI
+    # Check if models are available (either Keras or TFLite), so we can notify the user in the UI
     models_available = {
-        'mnist': os.path.exists(os.path.join(MODEL_DIR, 'mnist_model.keras')),
-        'emnist': os.path.exists(os.path.join(MODEL_DIR, 'emnist_model.keras'))
+        'mnist': os.path.exists(os.path.join(MODEL_DIR, 'mnist_model.keras')) or os.path.exists(os.path.join(MODEL_DIR, 'mnist_model.tflite')),
+        'emnist': os.path.exists(os.path.join(MODEL_DIR, 'emnist_model.keras')) or os.path.exists(os.path.join(MODEL_DIR, 'emnist_model.tflite'))
     }
     return render_template('index.html', models_available=models_available)
 
@@ -87,7 +121,17 @@ def predict_single():
         input_data = np.expand_dims(preprocessed_img, axis=0)
         
         # Predict
-        preds = model.predict(input_data)[0]
+        if model['type'] == 'tflite':
+            interpreter = model['interpreter']
+            input_details = model['input_details']
+            output_details = model['output_details']
+            
+            input_data = input_data.astype(np.float32)
+            interpreter.set_tensor(input_details[0]['index'], input_data)
+            interpreter.invoke()
+            preds = interpreter.get_tensor(output_details[0]['index'])[0]
+        else:
+            preds = model['model'].predict(input_data)[0]
         pred_idx = np.argmax(preds)
         confidence = float(preds[pred_idx])
         pred_char = classes[pred_idx]
@@ -225,7 +269,17 @@ def predict_ocr():
             input_char = np.expand_dims(preprocessed_char, axis=0)
             
             # Run prediction
-            preds = model.predict(input_char)[0]
+            if model['type'] == 'tflite':
+                interpreter = model['interpreter']
+                input_details = model['input_details']
+                output_details = model['output_details']
+                
+                input_char = input_char.astype(np.float32)
+                interpreter.set_tensor(input_details[0]['index'], input_char)
+                interpreter.invoke()
+                preds = interpreter.get_tensor(output_details[0]['index'])[0]
+            else:
+                preds = model['model'].predict(input_char)[0]
             pred_idx = np.argmax(preds)
             confidence = float(preds[pred_idx])
             pred_char = classes[pred_idx]
