@@ -1,7 +1,4 @@
 import numpy as np
-import tensorflow as tf
-# pyrefly: ignore [missing-import]
-from tensorflow.keras.utils import to_categorical
 import ssl
 
 # Bypass SSL certificate verification for downloads (common macOS python issue)
@@ -29,6 +26,7 @@ def load_and_preprocess_dataset(dataset_name='mnist'):
     Returns:
         x_train, y_train, x_test, y_test, class_names
     """
+    from tensorflow.keras.utils import to_categorical
     dataset_name = dataset_name.lower()
     
     if dataset_name == 'mnist':
