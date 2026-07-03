@@ -1,0 +1,8 @@
+{
+    "accuracy": 0.8902127659574468,
+    "precision": 0.8903805503549448,
+    "recall": 0.8902127659574466,
+    "f1_score": 0.8898386304077665,
+    "num_classes": 47,
+    "dataset_name": "emnist"
+}

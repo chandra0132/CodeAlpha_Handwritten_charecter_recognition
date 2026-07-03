@@ -1,0 +1,8 @@
+{
+    "accuracy": 0.9924,
+    "precision": 0.9922770781689845,
+    "recall": 0.9923402349547314,
+    "f1_score": 0.9923031749995765,
+    "num_classes": 10,
+    "dataset_name": "mnist"
+}
