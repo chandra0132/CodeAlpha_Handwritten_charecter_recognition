@@ -4,22 +4,36 @@ import numpy as np
 import cv2
 from flask import Flask, request, jsonify, render_template
 
-# Dynamically load TFLite or TensorFlow based on what's available
-try:
-    import tflite_runtime.interpreter as tflite
-    TFLITE_AVAILABLE = True
-except ImportError:
+# Deferred library imports for TFLite/Keras to enable instant startup
+TFLITE_AVAILABLE = None
+KERAS_AVAILABLE = None
+tflite = None
+tf = None
+
+def init_model_libs():
+    global TFLITE_AVAILABLE, KERAS_AVAILABLE, tflite, tf
+    if TFLITE_AVAILABLE is not None:
+        return
+        
     try:
-        import tensorflow.lite as tflite
+        # pyrefly: ignore [missing-import]
+        import tflite_runtime.interpreter as tfl_lib
+        tflite = tfl_lib
         TFLITE_AVAILABLE = True
     except ImportError:
-        TFLITE_AVAILABLE = False
+        try:
+            import tensorflow.lite as tfl_lib
+            tflite = tfl_lib
+            TFLITE_AVAILABLE = True
+        except ImportError:
+            TFLITE_AVAILABLE = False
 
-try:
-    import tensorflow as tf
-    KERAS_AVAILABLE = True
-except ImportError:
-    KERAS_AVAILABLE = False
+    try:
+        import tensorflow as tf_lib
+        tf = tf_lib
+        KERAS_AVAILABLE = True
+    except ImportError:
+        KERAS_AVAILABLE = False
 
 # Ensure modules in src are importable
 import sys
@@ -38,6 +52,7 @@ def get_model(dataset_name):
     """
     Lazy-load and cache model from models directory (TFLite first, Keras as fallback).
     """
+    init_model_libs()
     dataset_name = dataset_name.lower()
     if dataset_name not in MODELS_CACHE:
         tflite_path = os.path.join(MODEL_DIR, f"{dataset_name}_model.tflite")

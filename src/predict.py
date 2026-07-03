@@ -2,7 +2,6 @@ import os
 import argparse
 import numpy as np
 import cv2
-import tensorflow as tf
 
 # Ensure modules in src are importable
 import sys
@@ -120,6 +119,7 @@ def predict(model_path, image_path, dataset_name='mnist'):
     """
     Loads model, preprocesses image, runs prediction, and displays output.
     """
+    import tensorflow as tf
     # Check dataset and get classes
     if dataset_name.lower() == 'emnist':
         classes = EMNIST_CLASSES
